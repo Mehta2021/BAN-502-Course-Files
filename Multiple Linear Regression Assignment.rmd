@@ -1,0 +1,142 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+# Multiple Linear Regression Assignment
+## Mitul Mehta
+### BAN502
+
+
+```{r}
+library(devtools)
+library(parsnip)
+library(tidyverse)
+library(tidymodels)
+library(GGally)
+library(lubridate)
+library(ggcorrplot)
+library(glmnet)
+```
+
+```{r}
+bike_cleaned <- read_csv("bike_cleaned.csv")
+```
+
+```{r}
+bike = bike_cleaned %>% mutate(dteday = mdy(dteday))
+```
+
+```{r}
+bike[sapply(bike, is.character)] <- lapply(bike[sapply(bike, is.character)],as.factor)
+```
+
+```{r}
+bike$hr <- factor(bike$hr)
+```
+
+Why do we convert the “hr” variable into factor? Why not just leave as numbers? We do this so our regression model understands that the values are factors and adjusts the coefficients appropriately. 
+
+```{r}
+ggcorr(bike, label = "TRUE", leabel_round = 2)
+```
+
+Task 2: The quantitative variables that best correlate with count are temp, atemp, and instant.
+
+```{r}
+ggplot(bike,aes(x=hr,y=count)) + geom_boxplot() + theme_bw()
+ggplot(bike,aes(x=holiday,y=count)) + geom_boxplot() + theme_bw()
+ggplot(bike,aes(x=weekday,y=count)) + geom_boxplot() + theme_bw()
+ggplot(bike,aes(x=workingday,y=count)) + geom_boxplot() + theme_bw()
+ggplot(bike,aes(x=weathersit,y=count)) + geom_boxplot() + theme_bw()
+ggplot(bike,aes(x=season,y=count)) + geom_boxplot() + theme_bw()
+ggplot(bike,aes(x=mnth,y=count)) + geom_boxplot() + theme_bw()
+ggplot(bike,aes(x=dteday,y=count)) + geom_boxplot() + theme_bw()
+
+```
+
+Task 3: As can be seen in the above boxplots, I believe the variable that affect the count the most are weathersit, hr, and month. This is because these variables impact the riders experience the most. Hum, windspeed, and some the other variables have some impact, but not as much.  
+
+
+```{r}
+bike_recipe = recipe(count ~ temp, bike)
+
+lm_model = 
+  linear_reg() %>%
+  set_engine("lm")
+
+lm_wflow =
+  workflow() %>%
+  add_model(lm_model) %>%
+  add_recipe(bike_recipe)
+
+
+lm_fit = fit(lm_wflow, bike)
+```
+
+```{r}
+summary(lm_fit$fit$fit$fit)
+```
+Task 4: The adjusted R-squared is 0.1638. The positive coefficient of 381.29 indictes to us that as the temp goes up, count also goes up.
+
+
+Task 5:
+
+```{r}
+bike_recipe = recipe(count ~.,bike)%>%
+  step_rm(instant,dteday,registered,casual)%>%
+  step_dummy(all_nominal())%>%
+  step_center(all_predictors())%>%
+  step_scale(all_predictors())
+
+bike_ridge =
+  linear_reg(mixture = 0)%>%
+  set_engine("glmnet")
+
+bike_wflow =
+  workflow()%>%
+  add_model(bike_ridge)%>%
+  add_recipe(bike_recipe)
+
+ridge_fit = fit(bike_wflow, bike)
+```
+```{r}
+ridge_fit
+plot(ridge_fit$fit$fit$fit$lambda,ridge_fit$fit$fit$fit$dev.ratio)
+```
+In the above ridge model that tests 100 lambda values, we can see that as lambda gets smaller, the R squared gets bigger. The largest lambda value tested of 73420 put the slope coefficent nearly at 0.
+
+
+Task 6:
+
+```{r}
+bike_recipe2 = recipe(count ~.,bike)%>%
+  step_rm(instant,dteday,registered,casual)%>%
+  step_dummy(all_nominal())%>%
+  step_center(all_predictors())%>%
+  step_scale(all_predictors())
+
+lasso_model =
+  linear_reg(mixture = 1)%>%
+  set_engine("glmnet")
+
+lasso_wflow =
+  workflow()%>%
+  add_model(lasso_model)%>%
+  add_recipe(bike_recipe)
+
+lasso_fit = fit(lasso_wflow, bike)
+```
+```{r}
+lasso_fit
+plot(lasso_fit$fit$fit$fit$lambda,lasso_fit$fit$fit$fit$dev.ratio)
+```
+
+Similar to the ridge model, the above lasso model tests 100 lambda values. Through the summary and graph, we can see that as lambda gets smaller, the R squared gets bigger. The largest lambda value tested of 73.420 put the slope coefficient nearly at 0. The smallest lambda value (thats is shown in the summary) of 1.116 has a slope coefficient of 62.69.
+
+
+
+What are the implications of the model results from the ridge and lasso methods?
+
+The implications of the ridge and lasso models help us derive a set of predictors that minimize the prediction error. This can be seen through the various lambda models that were tested. 
+
